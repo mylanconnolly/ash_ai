@@ -177,6 +177,14 @@ defmodule AshAi do
           A set of {Resource, :action} pairs, or `{Resource, :*}` to be excluded from the added actions.
           """
         ],
+        modify_chain: [
+          type: {:fun, 2},
+          doc: """
+          A function that, if provided, allows you to modify the underlying
+          `LangChain.Chains.LLMChain` instance. This can be used to customize
+          the chain's behavior.
+          """
+        ],
         actor: [
           type: :any,
           doc: "The actor performing any actions."
@@ -310,18 +318,27 @@ defmodule AshAi do
   end
 
   def setup_ash_ai(lang_chain, opts) do
-    tools = functions(opts)
-
-    lang_chain
-    |> LLMChain.add_tools(tools)
-    |> LLMChain.update_custom_context(%{
-      actor: opts.actor,
-      tenant: opts.tenant,
-      tool_callbacks: %{
-        on_tool_start: opts.on_tool_start,
-        on_tool_end: opts.on_tool_end
+    context =
+      %{
+        actor: opts.actor,
+        tenant: opts.tenant,
+        tool_callbacks: %{
+          on_tool_start: opts.on_tool_start,
+          on_tool_end: opts.on_tool_end
+        }
       }
-    })
+
+    tools = functions(opts)
+    chain = LLMChain.add_tools(lang_chain, tools)
+
+    chain =
+      if opts.modify_chain do
+        opts.modify_chain.(chain, context)
+      else
+        chain
+      end
+
+    LLMChain.update_custom_context(chain, context)
   end
 
   defp run_loop(chain, first? \\ false) do
